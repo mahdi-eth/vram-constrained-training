@@ -1,0 +1,1 @@
+step,loss,val_loss,val_ppl,lr,grad_norm,tok_per_sec,gpu_temp,vram_mb,elapsed_s,loss_scale,overflow,fwd_ms,bwd_ms,optim_ms,vram_real_mb
