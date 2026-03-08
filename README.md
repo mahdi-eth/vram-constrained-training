@@ -1,12 +1,24 @@
 # vram-constrained-training
 
-Experiment data and analysis code for: **"Memory-Efficient Training Techniques Under Extreme VRAM Constraints: A Controlled Ablation on a 4 GB GPU"**
+Experiment data, analysis code, and key CUDA source files for: **"Memory-Efficient Training Techniques Under Extreme VRAM Constraints: A Controlled Ablation on a 4 GB GPU"**
 
 ## Contents
 
 ```
 ├── analysis/
 │   └── analyze_results.py       # generates all 9 paper figures from CSVs
+├── cuda/                        # key CUDA C++ source (see below)
+│   ├── include/ct/
+│   │   ├── memory.cuh           # bump memory allocator (persistent + scratch pools)
+│   │   ├── layers/block.cuh     # transformer block with gradient checkpointing
+│   │   ├── layers/transformer.cuh  # full model: forward/backward, checkpoint mask
+│   │   └── training/trainer.cuh    # trainer config, CUDA event timing
+│   └── src/
+│       ├── memory.cu            # allocator: alloc, reset, save_mark, restore_mark
+│       ├── train_main.cu        # CLI entry point, default config (55M params)
+│       ├── layers/block.cu      # block forward/backward + backward_with_recompute
+│       ├── layers/transformer.cu   # model-level GC orchestration, mixed precision
+│       └── training/trainer.cu     # training loop, grad accum, benchmark instrumentation
 ├── experiments/
 │   ├── run_benchmarks.bat       # Stage 1: 200-step profiling (6 configs)
 │   ├── run_convergence.bat      # Stage 2: 2000-step convergence (6 configs)
@@ -32,9 +44,19 @@ python analyze_results.py
 
 Figures are written to `../figures/`. The script reads CSVs from `../experiments/data/` using relative paths.
 
+## CUDA Source
+
+The `cuda/` directory contains the key source files from the CUDA C++ transformer that directly support the paper's claims. These are not independently compilable (they depend on kernel and utility headers not included here) but are provided for full transparency on:
+
+- **Memory management** (`memory.cuh/cu`): Bump allocator with pre-reserved persistent and scratch pools. The `save_mark()`/`restore_mark()` mechanism enables per-block activation scoping for gradient checkpointing.
+- **Gradient checkpointing** (`block.cu`, `transformer.cu`): `backward_with_recompute()` re-runs the forward pass within a mark/restore scope, freeing activations after each block. The model-level loop applies a per-layer checkpoint mask.
+- **Training instrumentation** (`trainer.cu`, `train_main.cu`): CUDA event timing around forward/backward/optimizer phases, dual VRAM reporting (pool accounting vs. `cudaMemGetInfo`), dynamic loss scaling for mixed precision.
+
+The full CUDA codebase (kernels, data loading, checkpointing, inference) is available from the author on request.
+
 ## Experiment Scripts
 
-The `.bat` files document the exact CLI flags passed to the CUDA trainer binary (`ct_train.exe`) for each experimental configuration. They are not directly runnable without the full CUDA codebase but serve as a complete record of the experimental procedure.
+The `.bat` files document the exact CLI flags passed to the CUDA trainer binary (`ct_train.exe`) for each experimental configuration.
 
 **Stage 1** (`run_benchmarks.bat`): 200 steps per config, no validation. Measures steady-state throughput, per-phase CUDA timing, and dual-level VRAM usage.
 
@@ -61,6 +83,6 @@ Each experiment CSV contains per-step measurements:
 | `val_loss` | Validation loss (NaN when not evaluated) |
 | `val_ppl` | Validation perplexity (NaN when not evaluated) |
 
-## Source Code
+## Contact
 
-The CUDA C++ transformer implementation is available from the author on request. Contact: mahdi.ettehad85@gmail.com
+Mahdi Ettehadnejad — mahdi.ettehad85@gmail.com
